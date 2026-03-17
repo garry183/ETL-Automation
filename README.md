@@ -9,7 +9,7 @@ Runs every day at 12:00 PM via Windows Task Scheduler.
 ## What it does
 
 1. Reads three input files placed in the configured input folder
-2. Aggregates and breaks down leads by brand (**Livguard** / **Livfast**)
+2. Aggregates and breaks down leads by brand ()
 3. Saves a summary CSV to the output folder (dated to yesterday, since data is always previous day)
 4. Posts the summary as a formatted table to Slack
 
@@ -109,9 +109,9 @@ The bot posts a monospace table directly to the configured channel:
 
 Brand        LSQ   Livsol   Alloc   Unalloc  DB Sub  DB Uniq
 ------------ ----- ------- ------- --------- ------- -------
-Overall       271    270      48      222      333     275
-Livguard      260    260      46      214      312     263
-Livfast        10     10       2        8       15      11
+Overall       
+Livguard      
+Livfast        
 ```
 
 ---
