@@ -1,0 +1,15 @@
+{
+    "input_folder": "D:/projects/ProPlusData/3files",
+    "output_folder": "D:/projects/ProPlusData/ouput",
+    "files": {
+        "lsq": "LSQ Leads.csv",
+        "livsol": "Livsol Leads.csv",
+        "database": "Database Leads.csv"
+    },
+    "livsol_allocation_column": "Status",
+    "livsol_allocated_value": "Allocated",
+    "slack": {
+        "channel": "#ldt-qa",
+        "mention_user": ""
+    }
+}
