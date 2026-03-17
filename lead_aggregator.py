@@ -14,6 +14,9 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 LOG_FILE = Path(__file__).parent / "lead_aggregator.log"
@@ -220,9 +223,9 @@ def save_output(df: pd.DataFrame, output_folder: str) -> str:
 
 # ── Send to Slack ──────────────────────────────────────────────────────────────
 def send_to_slack(output_path: str, summary: dict, slack_cfg: dict):
-    webhook_url = slack_cfg.get("webhook_url", "")
-    if not webhook_url or webhook_url.startswith("PASTE"):
-        log.warning("Slack webhook not configured — skipping Slack notification")
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
+    if not webhook_url:
+        log.warning("SLACK_WEBHOOK_URL not set — skipping Slack notification")
         return
 
     today = (datetime.now() - timedelta(days=1)).strftime("%d %b %Y")
