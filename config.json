@@ -9,7 +9,7 @@
     "livsol_allocation_column": "Status",
     "livsol_allocated_value": "Allocated",
     "slack": {
-        "channel": "#ldt-qa",
+        "channel": "",
         "mention_user": ""
     }
 }
