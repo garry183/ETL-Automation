@@ -51,12 +51,19 @@ def _lsq_brand_from_url(url: str) -> str:
 
 
 def extract_lsq(path: str) -> dict:
-    df = pd.read_csv(path, encoding="latin1", sep="\t")
+    df = pd.read_csv(path, encoding="latin1", sep=None, engine="python")
     total = len(df)
 
+    # Case-insensitive lookup for the page URL column
+    page_url_col = next(
+        (c for c in df.columns if c.lower().replace(" ", "").replace("_", "") == "pageurl"),
+        None,
+    )
+
     brand_stats = {}
-    if "pageUrl" in df.columns:
-        df["_brand"] = df["pageUrl"].apply(_lsq_brand_from_url)
+    if page_url_col:
+        log.info(f"LSQ: using column '{page_url_col}' for brand detection")
+        df["_brand"] = df[page_url_col].apply(_lsq_brand_from_url)
         for brand in ["Livguard", "Livfast"]:
             count = int((df["_brand"] == brand).sum())
             brand_stats[f"lsq_{brand.lower()}_total"] = count
@@ -65,6 +72,7 @@ def extract_lsq(path: str) -> dict:
             + " | ".join(f"{b}: {brand_stats[f'lsq_{b.lower()}_total']}" for b in ["Livguard", "Livfast"])
         )
     else:
+        log.warning(f"LSQ: 'pageUrl' column not found. Available columns: {list(df.columns)}")
         log.info(f"LSQ Leads: {total} total rows")
 
     return {"lsq_total": total, **brand_stats}
