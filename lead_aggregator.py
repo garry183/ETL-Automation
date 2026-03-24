@@ -89,7 +89,8 @@ def _normalize_brand(brand_val: str) -> str:
     return "Other"
 
 
-def extract_livsol(path: str, alloc_col: str = "", allocated_val: str = "") -> dict:
+def extract_livsol(path: str, alloc_col: str = "", allocated_val: str = "",
+                   balu_distributor: str = "Balu Venkatesan") -> dict:
     df = pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path)
     total = len(df)
 
@@ -114,6 +115,19 @@ def extract_livsol(path: str, alloc_col: str = "", allocated_val: str = "") -> d
             unallocated = 0
             log.warning("No allocation column or phone column found — all leads marked as allocated")
 
+    # Balu Venkatesan (default distributor for unassigned leads)
+    balu_total = 0
+    balu_brand_stats = {}
+    if "Distributor" in df.columns:
+        balu_total = int((df["Distributor"] == balu_distributor).sum())
+        log.info(f"Livsol: {balu_total} leads assigned to {balu_distributor}")
+        if "Brand" in df.columns:
+            df["_brand"] = df["Brand"].apply(_normalize_brand)
+            for brand in ["Livguard", "Livfast"]:
+                bdf = df[df["_brand"] == brand]
+                b_balu = int((bdf["Distributor"] == balu_distributor).sum())
+                balu_brand_stats[f"livsol_{brand.lower()}_balu"] = b_balu
+
     # Brand-wise allocated / unallocated
     brand_stats = {}
     if "Brand" in df.columns and alloc_col and alloc_col in df.columns:
@@ -132,6 +146,8 @@ def extract_livsol(path: str, alloc_col: str = "", allocated_val: str = "") -> d
         "livsol_total": total,
         "livsol_allocated": allocated,
         "livsol_unallocated": unallocated,
+        "livsol_balu": balu_total,
+        **balu_brand_stats,
         **brand_stats,
     }
 
@@ -197,6 +213,7 @@ def build_output(lsq: dict, livsol: dict, db: dict) -> pd.DataFrame:
             "Livsol": livsol.get(f"livsol_{key}_total", ""),
             "Allocated": livsol.get(f"livsol_{key}_allocated", ""),
             "Unallocated": livsol.get(f"livsol_{key}_unallocated", ""),
+            "Assigned to Balu": livsol.get(f"livsol_{key}_balu", ""),
             "DB Submissions": db.get(f"db_{key}_submissions", ""),
             "DB Unique Phones": db.get(f"db_{key}_unique_phones", ""),
         }
@@ -209,6 +226,7 @@ def build_output(lsq: dict, livsol: dict, db: dict) -> pd.DataFrame:
             "Livsol": livsol["livsol_total"],
             "Allocated": livsol["livsol_allocated"],
             "Unallocated": livsol["livsol_unallocated"],
+            "Assigned to Balu": livsol.get("livsol_balu", ""),
             "DB Submissions": db["db_total_submissions"],
             "DB Unique Phones": db["db_unique_phones"],
         },
@@ -241,8 +259,8 @@ def send_to_slack(output_path: str, summary: dict, slack_cfg: dict):
     mention_str = f"<{mention}> " if mention else ""
 
     # Build fixed-width table matching the CSV output
-    header  = f"{'Brand':<12} {'LSQ':>6} {'Livsol':>7} {'Alloc':>7} {'Unalloc':>9} {'DB Sub':>7} {'DB Uniq':>8}"
-    divider = f"{'-'*12} {'-'*6} {'-'*7} {'-'*7} {'-'*9} {'-'*7} {'-'*8}"
+    header  = f"{'Brand':<12} {'LSQ':>6} {'Livsol':>7} {'Alloc':>7} {'Unalloc':>9} {'Balu':>6} {'DB Sub':>7} {'DB Uniq':>8}"
+    divider = f"{'-'*12} {'-'*6} {'-'*7} {'-'*7} {'-'*9} {'-'*6} {'-'*7} {'-'*8}"
 
     def table_row(brand: str) -> str:
         key = brand.lower()
@@ -250,9 +268,10 @@ def send_to_slack(output_path: str, summary: dict, slack_cfg: dict):
         liv_val = summary["livsol_total"]           if brand == "Overall" else summary.get(f"livsol_{key}_total", 0)
         alloc   = summary["livsol_allocated"]       if brand == "Overall" else summary.get(f"livsol_{key}_allocated", 0)
         unalloc = summary["livsol_unallocated"]     if brand == "Overall" else summary.get(f"livsol_{key}_unallocated", 0)
+        balu    = summary.get("livsol_balu", 0)    if brand == "Overall" else summary.get(f"livsol_{key}_balu", 0)
         db_sub  = summary["db_total_submissions"]   if brand == "Overall" else summary.get(f"db_{key}_submissions", 0)
         db_uniq = summary["db_unique_phones"]       if brand == "Overall" else summary.get(f"db_{key}_unique_phones", 0)
-        return f"{brand:<12} {lsq_val:>6} {liv_val:>7} {alloc:>7} {unalloc:>9} {db_sub:>7} {db_uniq:>8}"
+        return f"{brand:<12} {lsq_val:>6} {liv_val:>7} {alloc:>7} {unalloc:>9} {balu:>6} {db_sub:>7} {db_uniq:>8}"
 
     table = "\n".join([header, divider] + [table_row(b) for b in ["Overall", "Livguard", "Livfast"]])
 
@@ -302,17 +321,18 @@ def main():
 
     print("\n" + "=" * 50)
     print(f"  Date     : {(datetime.now() - timedelta(days=1)).strftime('%d-%m-%Y')}")
-    print(f"  {'Brand':<12} {'LSQ':>6} {'Livsol':>7} {'Alloc':>7} {'Unalloc':>9} {'DB Sub':>7} {'DB Uniq':>8}")
-    print(f"  {'-'*12} {'-'*6} {'-'*7} {'-'*7} {'-'*9} {'-'*7} {'-'*8}")
+    print(f"  {'Brand':<12} {'LSQ':>6} {'Livsol':>7} {'Alloc':>7} {'Unalloc':>9} {'Balu':>6} {'DB Sub':>7} {'DB Uniq':>8}")
+    print(f"  {'-'*12} {'-'*6} {'-'*7} {'-'*7} {'-'*9} {'-'*6} {'-'*7} {'-'*8}")
     for brand in ["Overall", "Livguard", "Livfast"]:
         key = brand.lower()
         lsq_val  = lsq["lsq_total"]        if brand == "Overall" else lsq.get(f"lsq_{key}_total", 0)
         liv_val  = livsol["livsol_total"]   if brand == "Overall" else livsol.get(f"livsol_{key}_total", 0)
         alloc    = livsol["livsol_allocated"]   if brand == "Overall" else livsol.get(f"livsol_{key}_allocated", 0)
         unalloc  = livsol["livsol_unallocated"] if brand == "Overall" else livsol.get(f"livsol_{key}_unallocated", 0)
+        balu     = livsol.get("livsol_balu", 0) if brand == "Overall" else livsol.get(f"livsol_{key}_balu", 0)
         db_sub   = db["db_total_submissions"]   if brand == "Overall" else db.get(f"db_{key}_submissions", 0)
         db_uniq  = db["db_unique_phones"]       if brand == "Overall" else db.get(f"db_{key}_unique_phones", 0)
-        print(f"  {brand:<12} {lsq_val:>6} {liv_val:>7} {alloc:>7} {unalloc:>9} {db_sub:>7} {db_uniq:>8}")
+        print(f"  {brand:<12} {lsq_val:>6} {liv_val:>7} {alloc:>7} {unalloc:>9} {balu:>6} {db_sub:>7} {db_uniq:>8}")
     print(f"  Output saved : {output_path}")
     print("=" * 50 + "\n")
 
